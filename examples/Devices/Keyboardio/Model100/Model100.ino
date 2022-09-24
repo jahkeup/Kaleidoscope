@@ -649,6 +649,13 @@ void setup() {
   // First, call Kaleidoscope's internal setup function
   Kaleidoscope.setup();
 
+  // QUKEYS(
+  //   kaleidoscope::plugin::Qukey(PRIMARY, KeyAddr(2, 6), Key_LeftGui),
+  //   kaleidoscope::plugin::Qukey(PRIMARY, KeyAddr(2, 4), Key_LeftControl),
+  //   kaleidoscope::plugin::Qukey(COLEMAK, KeyAddr(2, 6), Key_LeftGui),
+  //   kaleidoscope::plugin::Qukey(COLEMAK, KeyAddr(2, 4), Key_LeftControl),
+  // )
+
   // Set the hue of the boot greeting effect to something that will result in a
   // nice green color.
   BootGreetingEffect.hue = 85;
