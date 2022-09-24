@@ -23,6 +23,8 @@
 // Support for communicating with the host via a simple Serial protocol
 #include "Kaleidoscope-FocusSerial.h"
 
+#include "Kaleidoscope-LayerFocus.h"
+
 // Support for keys that move the mouse
 #include "Kaleidoscope-MouseKeys.h"
 
@@ -46,16 +48,16 @@
 #include "Kaleidoscope-LEDEffect-Breathe.h"
 
 // Support for an LED mode that makes a red pixel chase a blue pixel across the keyboard
-#include "Kaleidoscope-LEDEffect-Chase.h"
+//#include "Kaleidoscope-LEDEffect-Chase.h"
 
 // Support for LED modes that pulse the keyboard's LED in a rainbow pattern
 #include "Kaleidoscope-LEDEffect-Rainbow.h"
 
 // Support for an LED mode that lights up the keys as you press them
-#include "Kaleidoscope-LED-Stalker.h"
+//#include "Kaleidoscope-LED-Stalker.h"
 
 // Support for an LED mode that prints the keys you press in letters 4px high
-#include "Kaleidoscope-LED-AlphaSquare.h"
+//#include "Kaleidoscope-LED-AlphaSquare.h"
 
 // Support for shared palettes for other plugins, like Colormap below
 #include "Kaleidoscope-LED-Palette-Theme.h"
@@ -104,6 +106,7 @@
 enum {
   MACRO_VERSION_INFO,
   MACRO_ANY,
+  MACRO_TOGGLE_COLEMAK,
 };
 
 
@@ -157,6 +160,7 @@ enum {
 
 enum {
   PRIMARY,
+  COLEMAK,
   NUMPAD,
   FUNCTION,
 };  // layers
@@ -260,8 +264,20 @@ KEYMAPS(
 #error "No default keymap defined. You should make sure that you have a line like '#define PRIMARY_KEYMAP_QWERTY' in your sketch"
 
 #endif
+  [COLEMAK] = KEYMAP_STACKED
+  (___,          Key_1, Key_2, Key_3, Key_4, Key_5, Key_LEDEffectNext,
+   Key_Backtick, Key_Q, Key_W, Key_F, Key_P, Key_G, Key_Tab,
+   Key_PageUp,   Key_A, Key_R, Key_S, Key_T, Key_D,
+   Key_PageDown, Key_Z, Key_X, Key_C, Key_V, Key_B, Key_Escape,
+   Key_LeftControl, Key_Backspace, Key_LeftGui, Key_LeftShift,
+   ShiftToLayer(FUNCTION),
 
-
+   M(MACRO_ANY),  Key_6, Key_7, Key_8,     Key_9,         Key_0,         LockLayer(NUMPAD),
+   Key_Enter,     Key_J, Key_L, Key_U,     Key_Y,         Key_Semicolon, Key_Equals,
+                  Key_H, Key_N, Key_E,     Key_I,         Key_O,         Key_Quote,
+   Key_RightAlt,  Key_K, Key_M, Key_Comma, Key_Period,    Key_Slash,     Key_Minus,
+   Key_RightShift, Key_LeftAlt, Key_Spacebar, Key_RightControl,
+   ShiftToLayer(FUNCTION)),
 
   [NUMPAD] =  KEYMAP_STACKED
   (___, ___, ___, ___, ___, ___, ___,
@@ -279,7 +295,7 @@ KEYMAPS(
    ___),
 
   [FUNCTION] =  KEYMAP_STACKED
-  (___,      Key_F1,           Key_F2,      Key_F3,     Key_F4,        Key_F5,           Key_CapsLock,
+  (___,      Key_F1,           Key_F2,      Key_F3,     Key_F4,        Key_F5,           M(MACRO_TOGGLE_COLEMAK),
    Key_Tab,  ___,              Key_mouseUp, ___,        Key_mouseBtnR, Key_mouseWarpEnd, Key_mouseWarpNE,
    Key_Home, Key_mouseL,       Key_mouseDn, Key_mouseR, Key_mouseBtnL, Key_mouseWarpNW,
    Key_End,  Key_PrintScreen,  Key_Insert,  ___,        Key_mouseBtnM, Key_mouseWarpSW,  Key_mouseWarpSE,
@@ -324,6 +340,15 @@ static void anyKeyMacro(KeyEvent &event) {
   }
 }
 
+static void toggleColemakMacro(KeyEvent &event) {
+  if (keyToggledOn(event.state)) {
+    if (Layer.isActive(COLEMAK)) {
+      Layer.deactivate(COLEMAK);
+    } else {
+      Layer.activate(COLEMAK);
+    }
+  }
+}
 
 /** macroAction dispatches keymap events that are tied to a macro
     to that macro. It takes two uint8_t parameters.
@@ -346,6 +371,10 @@ const macro_t *macroAction(uint8_t macro_id, KeyEvent &event) {
 
   case MACRO_ANY:
     anyKeyMacro(event);
+    break;
+
+  case MACRO_TOGGLE_COLEMAK:
+    toggleColemakMacro(event);
     break;
   }
   return MACRO_NONE;
@@ -454,6 +483,8 @@ KALEIDOSCOPE_INIT_PLUGINS(
   // both debugging, and in backing up one's EEPROM contents.
   FocusEEPROMCommand,
 
+  LayerFocus,
+
   // The boot greeting effect pulses the LED button for 10 seconds after the
   // keyboard is first connected
   BootGreetingEffect,
@@ -478,7 +509,7 @@ KALEIDOSCOPE_INIT_PLUGINS(
 
   // The chase effect follows the adventure of a blue pixel which chases a red pixel across
   // your keyboard. Spoiler: the blue pixel never catches the red pixel
-  LEDChaseEffect,
+  //LEDChaseEffect,
 
   // These static effects turn your keyboard's LEDs a variety of colors
   solidRed,
@@ -494,10 +525,10 @@ KALEIDOSCOPE_INIT_PLUGINS(
 
   // The AlphaSquare effect prints each character you type, using your
   // keyboard's LEDs as a display
-  AlphaSquareEffect,
+  //AlphaSquareEffect,
 
   // The stalker effect lights up the keys you've pressed recently
-  StalkerEffect,
+  //StalkerEffect,
 
   // The LED Palette Theme plugin provides a shared palette for other plugins,
   // like Colormap below
@@ -566,7 +597,7 @@ void setup() {
   NumPad.numPadLayer = NUMPAD;
 
   // We configure the AlphaSquare effect to use RED letters
-  AlphaSquare.color = CRGB(255, 0, 0);
+  //AlphaSquare.color = CRGB(255, 0, 0);
 
   // We set the brightness of the rainbow effects to 150 (on a scale of 0-255)
   // This draws more than 500mA, but looks much nicer than a dimmer effect
@@ -579,7 +610,7 @@ void setup() {
   // The LED Stalker mode has a few effects. The one we like is called
   // 'BlazingTrail'. For details on other options, see
   // https://github.com/keyboardio/Kaleidoscope/blob/master/docs/plugins/LED-Stalker.md
-  StalkerEffect.variant = STALKER(BlazingTrail);
+  //StalkerEffect.variant = STALKER(BlazingTrail);
 
   // We want to make sure that the firmware starts with LED effects off
   // This avoids over-taxing devices that don't have a lot of power to share
