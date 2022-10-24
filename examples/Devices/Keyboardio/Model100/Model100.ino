@@ -2,16 +2,10 @@
 // Copyright 2016-2022 Keyboardio, inc. <jesse@keyboard.io>
 // See "LICENSE" for license details
 
-#ifndef BUILD_INFORMATION
-#define BUILD_INFORMATION "locally built on " __DATE__ " at " __TIME__
-#endif
-
-
 /**
  * These #include directives pull in the Kaleidoscope firmware core,
  * as well as the Kaleidoscope plugins we use in the Model 100's firmware
  */
-
 
 // The Kaleidoscope core
 #include "Kaleidoscope.h"
@@ -24,6 +18,9 @@
 #include "Kaleidoscope-FocusSerial.h"
 
 #include "Kaleidoscope-LayerFocus.h"
+
+// Support for querying the firmware version via Focus
+#include "Kaleidoscope-FirmwareVersion.h"
 
 // Support for keys that move the mouse
 #include "Kaleidoscope-MouseKeys.h"
@@ -68,6 +65,12 @@
 // Support for turning the LEDs off after a certain amount of time
 #include "Kaleidoscope-IdleLEDs.h"
 
+// Support for setting and saving the default LED mode
+#include "Kaleidoscope-DefaultLEDModeConfig.h"
+
+// Support for changing the brightness of the LEDs
+#include "Kaleidoscope-LEDBrightnessConfig.h"
+
 // Support for Keyboardio's internal keyboard testing mode
 #include "Kaleidoscope-HardwareTestMode.h"
 
@@ -89,6 +92,15 @@
 
 // Support for dynamic, Chrysalis-editable macros
 #include "Kaleidoscope-DynamicMacros.h"
+
+// Support for SpaceCadet keys
+#include "Kaleidoscope-SpaceCadet.h"
+
+// Support for editable layer names
+#include "Kaleidoscope-LayerNames.h"
+
+// Support for the GeminiPR Stenography protocol
+#include "Kaleidoscope-Steno.h"
 
 /** This 'enum' is a list of all the macros used by the Model 100's firmware
   * The names aren't particularly important. What is important is that each
@@ -320,8 +332,8 @@ KEYMAPS(
 
 static void versionInfoMacro(uint8_t key_state) {
   if (keyToggledOn(key_state)) {
-    Macros.type(PSTR("Keyboardio Model 100 - Kaleidoscope "));
-    Macros.type(PSTR(BUILD_INFORMATION));
+    Macros.type(PSTR("Keyboardio Model 100 - Firmware version "));
+    Macros.type(PSTR(KALEIDOSCOPE_FIRMWARE_VERSION));
   }
 }
 
@@ -400,12 +412,11 @@ static kaleidoscope::plugin::LEDSolidColor solidViolet(130, 0, 120);
 void toggleLedsOnSuspendResume(kaleidoscope::plugin::HostPowerManagement::Event event) {
   switch (event) {
   case kaleidoscope::plugin::HostPowerManagement::Suspend:
+  case kaleidoscope::plugin::HostPowerManagement::Sleep:
     LEDControl.disable();
     break;
   case kaleidoscope::plugin::HostPowerManagement::Resume:
     LEDControl.enable();
-    break;
-  case kaleidoscope::plugin::HostPowerManagement::Sleep:
     break;
   }
 }
@@ -484,6 +495,12 @@ KALEIDOSCOPE_INIT_PLUGINS(
   EEPROMSettings,
   EEPROMKeymap,
 
+  // SpaceCadet can turn your shifts into parens on tap, while keeping them as
+  // Shifts when held. SpaceCadetConfig lets Chrysalis configure some aspects of
+  // the plugin.
+  SpaceCadet,
+  SpaceCadetConfig,
+
   // Focus allows bi-directional communication with the host, and is the
   // interface through which the keymap in EEPROM can be edited.
   Focus,
@@ -559,7 +576,10 @@ KALEIDOSCOPE_INIT_PLUGINS(
   Macros,
 
   // The MouseKeys plugin lets you add keys to your keymap which move the mouse.
+  // The MouseKeysConfig plugin lets Chrysalis configure some aspects of the
+  // plugin.
   MouseKeys,
+  MouseKeysConfig,
 
   // The HostPowerManagement plugin allows us to turn LEDs off when then host
   // goes to sleep, and resume them when it wakes up.
@@ -584,6 +604,7 @@ KALEIDOSCOPE_INIT_PLUGINS(
   // Enables the "Sticky" behavior for modifiers, and the "Layer shift when
   // held" functionality for layer keys.
   OneShot,
+  OneShotConfig,
   EscapeOneShot,
   EscapeOneShotConfig,
 
@@ -592,7 +613,26 @@ KALEIDOSCOPE_INIT_PLUGINS(
   PersistentIdleLEDs,
 
   // Enables dynamic, Chrysalis-editable macros.
-  DynamicMacros);
+  DynamicMacros,
+
+  // The FirmwareVersion plugin lets Chrysalis query the version of the firmware
+  // programmatically.
+  FirmwareVersion,
+
+  // The LayerNames plugin allows Chrysalis to display - and edit - custom layer
+  // names, to be shown instead of the default indexes.
+  //LayerNames,
+
+  // Enables setting, saving (via Chrysalis), and restoring (on boot) the
+  // default LED mode.
+  //DefaultLEDModeConfig,
+
+  // Enables controlling (and saving) the brightness of the LEDs via Focus.
+  LEDBrightnessConfig,
+
+  // Enables the GeminiPR Stenography protocol. Unused by default, but with the
+  // plugin enabled, it becomes configurable - and then usable - via Chrysalis.
+  GeminiPR);
 
 /** The 'setup' function is one of the two standard Arduino sketch functions.
  * It's called when your keyboard first powers up. This is where you set up
@@ -620,10 +660,10 @@ void setup() {
   // We configure the AlphaSquare effect to use RED letters
   //AlphaSquare.color = CRGB(255, 0, 0);
 
-  // We set the brightness of the rainbow effects to 150 (on a scale of 0-255)
-  // This draws more than 500mA, but looks much nicer than a dimmer effect
-  LEDRainbowEffect.brightness(255);
-  LEDRainbowWaveEffect.brightness(255);
+  // Set the rainbow effects to be reasonably bright, but low enough
+  // to mitigate audible noise in some environments.
+  LEDRainbowEffect.brightness(170);
+  LEDRainbowWaveEffect.brightness(160);
 
   // Set the action key the test mode should listen for to Left Fn
   HardwareTestMode.setActionKey(R3C6);
@@ -653,6 +693,25 @@ void setup() {
   // For Dynamic Macros, we need to reserve storage space for the editable
   // macros. A kilobyte is a reasonable default.
   DynamicMacros.reserve_storage(1024);
+
+  // If there's a default layer set in EEPROM, we should set that as the default
+  // here.
+  //Layer.move(EEPROMSettings.default_layer());
+
+  // To avoid any surprises, SpaceCadet is turned off by default. However, it
+  // can be permanently enabled via Chrysalis, so we should only disable it if
+  // no configuration exists.
+  SpaceCadetConfig.disableSpaceCadetIfUnconfigured();
+
+  // Editable layer names are stored in EEPROM too, and we reserve 16 bytes per
+  // layer for them. We need one extra byte per layer for bookkeeping, so we
+  // reserve 17 / layer in total.
+  //LayerNames.reserve_storage(17 * 8);
+
+  // Unless configured otherwise with Chrysalis, we want to make sure that the
+  // firmware starts with LED effects off. This avoids over-taxing devices that
+  // don't have a lot of power to share with USB devices
+  //DefaultLEDModeConfig.activateLEDModeIfUnconfigured(&LEDOff);
 }
 
 /** loop is the second of the standard Arduino sketch functions.
